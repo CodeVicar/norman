@@ -279,15 +279,15 @@ const Home = () => {
 
             {(recordingType === 'camera' || recordingType === 'screen') && recordedVideoUrl && (
               <div className={`relative ${
-                selectedAspectRatio === '9:16' ? 'w-[33.33%] aspect-[9/16]' :
-                selectedAspectRatio === '1:1' ? 'w-[75%] aspect-square' :
-                selectedAspectRatio === '4:3' ? 'w-[75%] aspect-[4/3]' : 
+                selectedAspectRatio === '9:16' ? 'w-1/2 max-w-[400px] aspect-[9/16]' :
+                selectedAspectRatio === '1:1' ? 'w-3/4 max-w-[600px] aspect-square' :
+                selectedAspectRatio === '4:3' ? 'w-3/4 max-w-[700px] aspect-[4/3]' :
                 'w-full aspect-video'
               }`}>
                 <video
                   ref={previewVideoRef}
                   src={recordedVideoUrl}
-                  className="w-full h-full object-contain"
+                  className="w-full h-full object-contain block"
                   controls
                 />
               </div>
@@ -468,6 +468,7 @@ const Home = () => {
           onContentChange={setTeleprompterContent}
           recordingDuration={recordingDuration}
           selectedAspectRatio={selectedAspectRatio}
+          onClose={() => setIsTeleprompterVisible(false)}
         />
       </div>
     </div>

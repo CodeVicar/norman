@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import Draggable from 'react-draggable';
 
-export const Teleprompter = ({ isVisible, content, onContentChange, recordingDuration, selectedAspectRatio }) => {
+export const Teleprompter = ({ isVisible, content, onContentChange, recordingDuration, selectedAspectRatio, onClose }) => {
   const textareaRef = useRef(null);
   const nodeRef = useRef(null);
   const [teleprompterSpeed, setTeleprompterSpeed] = useState(50);
@@ -143,7 +143,7 @@ export const Teleprompter = ({ isVisible, content, onContentChange, recordingDur
             </div>
             <span>{teleprompterSpeed}</span>
           </div>
-          <div className="cursor-pointer px-2.5" onClick={() => console.log("Close teleprompter")}>X</div>
+          <button onClick={onClose} className="cursor-pointer px-2.5">X</button>
         </div>
         <div className="flex-grow overflow-y-scroll scrollbar-none flex flex-col">
           <textarea
