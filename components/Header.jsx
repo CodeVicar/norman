@@ -7,7 +7,7 @@ const Header = () => {
       <div className="container mx-auto flex items-center justify-between">
         <div className="flex items-center">
           <Link href="/" className="flex flex-col leading-none">
-            <span className="text-purple-600 font-bold text-xs uppercase">FREE ONLINE</span>
+            <span className="text-purple-600 font-bold text-xs uppercase">Mosir West  ONLINE</span>
             <span className="text-gray-800 font-bold text-xl">Screen Recorder</span>
           </Link>
         </div>
@@ -25,8 +25,8 @@ const Header = () => {
         </nav>
 
         <div className="flex items-center">
-          <Link href="/recorder" className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-full hover:bg-blue-700 transition-colors shadow-md">
-            Record
+          <Link href="/recorder" className="px-6 py-2 bg-purple-600 text-white font-semibold rounded-full hover:bg-blue-700 transition-colors shadow-md">
+            Record Now
           </Link>
         </div>
       </div>

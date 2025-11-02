@@ -33,6 +33,13 @@ const ScreenRecorder = () => {
   const videoRef = useRef(null);
   const previewVideoRef = useRef(null);
   const recordingStartTimeRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const audioDestinationRef = useRef(null);
+  const micSourceRef = useRef(null);
+  const systemSourceRef = useRef(null);
+  const micGainRef = useRef(null);
+  const systemGainRef = useRef(null);
+  const micStreamRef = useRef(null);
 
   useEffect(() => {
     const getAudioDevices = async () => {
@@ -78,27 +85,55 @@ const ScreenRecorder = () => {
             height: { ideal: height },
             frameRate: VIDEO_FPS,
           },
-          audio: false,
+          audio: true, // request system/tab audio when available
         });
+        // Build audio mixing graph: mix system (if present) + microphone into one track
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!audioContextRef.current) {
+          audioContextRef.current = new AC();
+        }
+        const audioContext = audioContextRef.current;
+        if (!audioDestinationRef.current) {
+          audioDestinationRef.current = audioContext.createMediaStreamDestination();
+        }
+        const destination = audioDestinationRef.current;
 
-        let audioStream = null;
+        // System audio (from screen share) if present
+        const hasSystemAudio = screenStream.getAudioTracks().length > 0;
+        if (hasSystemAudio) {
+          try {
+            systemSourceRef.current = audioContext.createMediaStreamSource(screenStream);
+            systemGainRef.current = audioContext.createGain();
+            systemGainRef.current.gain.value = 1;
+            systemSourceRef.current.connect(systemGainRef.current).connect(destination);
+          } catch (e) {
+            console.warn('System audio unavailable for mixing:', e);
+          }
+        }
+
+        // Microphone audio (optional)
         if (!isMuted) {
           try {
-            audioStream = await navigator.mediaDevices.getUserMedia({
-              audio: selectedAudioDevice ? { exact: selectedAudioDevice } : true,
+            micStreamRef.current = await navigator.mediaDevices.getUserMedia({
+              audio: selectedAudioDevice ? { deviceId: { exact: selectedAudioDevice } } : true,
               video: false,
             });
+            micSourceRef.current = audioContext.createMediaStreamSource(micStreamRef.current);
+            micGainRef.current = audioContext.createGain();
+            micGainRef.current.gain.value = 1;
+            micSourceRef.current.connect(micGainRef.current).connect(destination);
           } catch (audioErr) {
             console.error("Error accessing audio for screen recording:", audioErr);
           }
         }
 
-        const tracks = ['video'].flatMap(kind => screenStream.getTracks().filter(track => track.kind === kind));
-        if (audioStream) {
-          tracks.push(...audioStream.getTracks().filter(track => track.kind === 'audio'));
-        }
-
-        const combinedStream = new MediaStream(tracks);
+        // Build combined stream: screen video + mixed audio track
+        const videoTracks = screenStream.getVideoTracks();
+        const mixedAudioTracks = destination.stream.getAudioTracks();
+        const combinedStream = new MediaStream([
+          ...videoTracks,
+          ...mixedAudioTracks,
+        ]);
         streamRef.current = combinedStream;
 
         // Get and store the actual screen dimensions
@@ -124,6 +159,19 @@ const ScreenRecorder = () => {
         streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
       }
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(track => track.stop());
+        micStreamRef.current = null;
+      }
+      if (audioContextRef.current) {
+        try { audioContextRef.current.close(); } catch {}
+        audioContextRef.current = null;
+        audioDestinationRef.current = null;
+        micSourceRef.current = null;
+        systemSourceRef.current = null;
+        micGainRef.current = null;
+        systemGainRef.current = null;
+      }
       if (videoRef.current) {
         videoRef.current.srcObject = null;
       }
@@ -132,7 +180,44 @@ const ScreenRecorder = () => {
         setRecordedVideoUrl(null);
       }
     };
-  }, [recordedVideoUrl, selectedAspectRatio, isMuted, selectedAudioDevice]);
+  }, [recordedVideoUrl, selectedAspectRatio]);
+
+  useEffect(() => {
+    const updateAudioStream = async () => {
+      if (!audioContextRef.current || !audioDestinationRef.current) return;
+
+      // Remove previous mic source
+      if (micSourceRef.current && micGainRef.current) {
+        try { micSourceRef.current.disconnect(); } catch {}
+        try { micGainRef.current.disconnect(); } catch {}
+        micSourceRef.current = null;
+        micGainRef.current = null;
+      }
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(t => t.stop());
+        micStreamRef.current = null;
+      }
+
+      if (!isMuted) {
+        try {
+          micStreamRef.current = await navigator.mediaDevices.getUserMedia({
+            audio: selectedAudioDevice ? { deviceId: { exact: selectedAudioDevice } } : true,
+            video: false,
+          });
+          const ctx = audioContextRef.current;
+          micSourceRef.current = ctx.createMediaStreamSource(micStreamRef.current);
+          micGainRef.current = ctx.createGain();
+          micGainRef.current.gain.value = 1;
+          micSourceRef.current.connect(micGainRef.current).connect(audioDestinationRef.current);
+        } catch (audioErr) {
+          console.error("Error updating microphone stream:", audioErr);
+        }
+      }
+    };
+
+    updateAudioStream();
+
+  }, [selectedAudioDevice, isMuted]);
 
   const startRecording = useCallback(async () => {
     if (!streamRef.current) {
@@ -146,9 +231,19 @@ const ScreenRecorder = () => {
     }
 
     try {
-      const mediaRecorder = new MediaRecorder(streamRef.current, {
-        mimeType: 'video/webm;codecs=vp9',
-      });
+      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+        try { await audioContextRef.current.resume(); } catch {}
+      }
+      const supportedTypes = [
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm;codecs=vp9',
+        'video/webm'
+      ];
+      const mimeType = supportedTypes.find(t => window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+      const mediaRecorder = mimeType
+        ? new MediaRecorder(streamRef.current, { mimeType })
+        : new MediaRecorder(streamRef.current);
 
       mediaRecorderRef.current = mediaRecorder;
       const chunks = [];
